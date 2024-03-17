@@ -1,7 +1,11 @@
 using UnityEngine;
+using System.Collections;
 
 public class PlayerController : MonoBehaviour
 {
+    // Referencia al ScoreManager
+    private ScoreManager scoreManager;
+
     public float moveSpeed = 5.0f;
     public float jumpForce = 5f;
     private Rigidbody rb;
@@ -9,36 +13,36 @@ public class PlayerController : MonoBehaviour
     private bool isGrounded = true;
     public Vector3 jumpScale = new Vector3(1.2f, 0.8f, 1.2f);
     private Vector3 originalScale;
-    private Renderer renderer; // Componente Renderer para cambiar el color
-    public Color hitColor = Color.red; // Color cuando el jugador es golpeado
-    private Color originalColor; // Color original del jugador
-    public float blinkDuration = 0.5f; // Duración del parpadeo
-    private float blinkTimer = 0f;
+    private Renderer playerRenderer;
+    public Color blinkColor1 = Color.red;
+    public Color blinkColor2 = Color.blue;
+    private Color originalColor;
+    private bool isBlinking = false;
+    private Coroutine blinkingCoroutine;
+    private float originalMoveSpeed;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
         cameraTransform = Camera.main.transform;
         originalScale = transform.localScale;
-        renderer = GetComponent<Renderer>(); // Obtiene el componente Renderer
-        originalColor = renderer.material.color; // Guarda el color original
+        playerRenderer = GetComponent<Renderer>();
+        originalColor = playerRenderer.material.color;
+        originalMoveSpeed = moveSpeed;
+
+        // Busca el ScoreManager en la escena
+        scoreManager = FindObjectOfType<ScoreManager>();
+
+        if (scoreManager == null)
+        {
+            Debug.LogError("ScoreManager no encontrado en la escena.");
+        }
     }
 
     void Update()
     {
-        // Mover y saltar al jugador
         HandleMovement();
         HandleJumping();
-
-        // Proceso de parpadeo
-        if (blinkTimer > 0)
-        {
-            blinkTimer -= Time.deltaTime;
-            if (blinkTimer <= 0)
-            {
-                renderer.material.color = originalColor; // Restaura el color original
-            }
-        }
     }
 
     private void HandleMovement()
@@ -48,6 +52,7 @@ public class PlayerController : MonoBehaviour
         Vector3 cameraForward = cameraTransform.forward;
         cameraForward.y = 0;
         Vector3 cameraRight = cameraTransform.right;
+        cameraRight.y = 0;
         Vector3 movement = (cameraForward * moveVertical + cameraRight * moveHorizontal).normalized;
         rb.velocity = new Vector3(movement.x * moveSpeed, rb.velocity.y, movement.z * moveSpeed);
     }
@@ -62,30 +67,65 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    private void OnCollisionEnter(Collision collision)
+    void OnCollisionEnter(Collision collision)
     {
         if (collision.gameObject.CompareTag("Ground"))
         {
             isGrounded = true;
             transform.localScale = originalScale;
         }
+
+        if (collision.gameObject.CompareTag("PickUp"))
+        {
+            collision.gameObject.SetActive(false);
+            if (scoreManager != null)
+            {
+                scoreManager.IncreaseScore(); // Incrementa el contador de pickups recolectados
+                if (scoreManager.IsAllPickupsCollected()) // Verifica si se han recolectado todos los pickups
+                {
+                    Debug.Log("Has Ganado!");
+                }
+                // Inicia el parpadeo
+                StartBlinkingEffect();
+            }
+        }
     }
 
-    private void OnTriggerEnter(Collider other)
+    public void StartBlinkingEffect()
     {
-        if (other.gameObject.CompareTag("PickUp"))
+        if (!isBlinking)
         {
-            other.gameObject.SetActive(false);
-        }
-        else if (other.gameObject.CompareTag("Enemy")) // Detecta al enemigo
-        {
-            BlinkRed(); // Inicia el parpadeo
+            isBlinking = true;
+            blinkingCoroutine = StartCoroutine(BlinkEffect());
         }
     }
 
-    void BlinkRed()
+    public void StopBlinkingEffect()
     {
-        renderer.material.color = hitColor; // Cambia al color rojo
-        blinkTimer = blinkDuration; // Reinicia el temporizador de parpadeo
+        if (isBlinking)
+        {
+            StopCoroutine(blinkingCoroutine);
+            playerRenderer.material.color = originalColor;
+            isBlinking = false;
+        }
+    }
+
+    IEnumerator BlinkEffect()
+    {
+        while (isBlinking)
+        {
+            playerRenderer.material.color = blinkColor1;
+            yield return new WaitForSeconds(0.1f);
+            playerRenderer.material.color = blinkColor2;
+            yield return new WaitForSeconds(0.1f);
+        }
+    }
+
+    public void ModifyMoveSpeed(float multiplier)
+    {
+        moveSpeed = originalMoveSpeed * multiplier;
     }
 }
+
+
+
